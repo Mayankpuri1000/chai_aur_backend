@@ -225,3 +225,54 @@ export const updateUserAvatar = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
+
+export const getUserChannelProfile = async (req, res) => {
+  const { username } = req.params;
+
+  if(!username?.trim()) {
+    return res.status(400).json({ message: "Username is required" });
+  }
+
+  const channel = await User.aggregate([
+    { $match: { username: username?.toLowerCase() } },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    {
+      $addFields: {
+        subscribersCount: { $size: "$subscribers" },
+        subscribedToCount: { $size: "$subscribedTo" },
+        isSubscribed: { $cond: { if: { $in: [req.user?._id, "$subscribers.subscriber"] }, then: true, else: false } }
+      }
+    }, 
+    { $project: {
+      _id: 1,
+      fullName: 1,
+      username: 1,
+      avatar: 1,
+      coverImage: 1,
+      subscribersCount: 1,
+      subscribedToCount: 1,
+      isSubscribed: 1,
+    } }
+  ]);
+
+  if(!channel?.length) {
+    return res.status(400).json({ message: "Channel not found" });
+  }
+
+  return res.status(200).json({ message: "Channel profile fetched successfully", data: channel[0] });
+};
