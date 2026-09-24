@@ -160,7 +160,7 @@ export const changePassword = async (req, res) => {
     const { oldPassword, newPassword } = req.body;
 
     const user = await User.findById(req.user?._id);
-   
+
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
     if (!isPasswordCorrect) {
       return res.status(400).json({ message: "Invalid password" });
@@ -170,7 +170,6 @@ export const changePassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     return res.status(200).json({ message: "Password changed successfully" });
-
   } catch (error) {
     res
       .status(500)
@@ -179,22 +178,30 @@ export const changePassword = async (req, res) => {
 };
 
 export const getCurrentUser = async (req, res) => {
-  return res.status(200).json({ message: "Current user fetched successfully", data: req.user });
+  return res
+    .status(200)
+    .json({ message: "Current user fetched successfully", data: req.user });
 };
 
 export const updateAccountDetails = async (req, res) => {
-  const {fullName, email} = req.body;
-  
-  if(!fullName?.trim() || !email?.trim()) {
+  const { fullName, email } = req.body;
+
+  if (!fullName?.trim() || !email?.trim()) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
-    const user = await User.findByIdAndUpdate(req.user?._id, {
-      $set: { fullName, email },
-    }, { new: true }).select("-password -refreshToken");
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      {
+        $set: { fullName, email },
+      },
+      { new: true },
+    ).select("-password -refreshToken");
 
-    return res.status(200).json({ message: "Account details updated successfully", data: user });
+    return res
+      .status(200)
+      .json({ message: "Account details updated successfully", data: user });
   } catch (error) {
     res
       .status(500)
@@ -204,21 +211,27 @@ export const updateAccountDetails = async (req, res) => {
 
 export const updateUserAvatar = async (req, res) => {
   const avatarLocalPath = req.file?.path;
-  if(!avatarLocalPath) {
+  if (!avatarLocalPath) {
     return res.status(400).json({ message: "Avatar is required" });
   }
 
   try {
     const avatar = await uploadOnCloudiary(avatarLocalPath);
-    if(!avatar) {
+    if (!avatar) {
       return res.status(400).json({ message: "Avatar upload failed" });
     }
 
-    const user = await User.findByIdAndUpdate(req.user?._id, {
-      $set: { avatar: avatar.url },
-    }, { new: true }).select("-password -refreshToken");
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      {
+        $set: { avatar: avatar.url },
+      },
+      { new: true },
+    ).select("-password -refreshToken");
 
-    return res.status(200).json({ message: "Avatar updated successfully", data: user });
+    return res
+      .status(200)
+      .json({ message: "Avatar updated successfully", data: user });
   } catch (error) {
     res
       .status(500)
@@ -229,7 +242,7 @@ export const updateUserAvatar = async (req, res) => {
 export const getUserChannelProfile = async (req, res) => {
   const { username } = req.params;
 
-  if(!username?.trim()) {
+  if (!username?.trim()) {
     return res.status(400).json({ message: "Username is required" });
   }
 
@@ -255,24 +268,75 @@ export const getUserChannelProfile = async (req, res) => {
       $addFields: {
         subscribersCount: { $size: "$subscribers" },
         subscribedToCount: { $size: "$subscribedTo" },
-        isSubscribed: { $cond: { if: { $in: [req.user?._id, "$subscribers.subscriber"] }, then: true, else: false } }
-      }
-    }, 
-    { $project: {
-      _id: 1,
-      fullName: 1,
-      username: 1,
-      avatar: 1,
-      coverImage: 1,
-      subscribersCount: 1,
-      subscribedToCount: 1,
-      isSubscribed: 1,
-    } }
+        isSubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        fullName: 1,
+        username: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscribersCount: 1,
+        subscribedToCount: 1,
+        isSubscribed: 1,
+      },
+    },
   ]);
 
-  if(!channel?.length) {
+  if (!channel?.length) {
     return res.status(400).json({ message: "Channel not found" });
   }
 
-  return res.status(200).json({ message: "Channel profile fetched successfully", data: channel[0] });
+  return res
+    .status(200)
+    .json({
+      message: "Channel profile fetched successfully",
+      data: channel[0],
+    });
+};
+
+export const getWatchHistory = async (req, res) => {
+  const user = await User.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(req.user?._id) } },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [{ $project: { fullName: 1, username: 1, avatar: 1 } }],
+            },
+          },
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+    { $project: { _id: 1, watchHistory: 1 } },
+  ]);
+
+  return res.status(200).json({
+    message: "Watch history fetched successfully",
+    data: user[0].watchHistory,
+  });
 };
