@@ -154,3 +154,74 @@ export const logOutUser = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
+
+export const changePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user?._id);
+   
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+    if (!isPasswordCorrect) {
+      return res.status(400).json({ message: "Invalid password" });
+    }
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({ message: "Password changed successfully" });
+
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+export const getCurrentUser = async (req, res) => {
+  return res.status(200).json({ message: "Current user fetched successfully", data: req.user });
+};
+
+export const updateAccountDetails = async (req, res) => {
+  const {fullName, email} = req.body;
+  
+  if(!fullName?.trim() || !email?.trim()) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(req.user?._id, {
+      $set: { fullName, email },
+    }, { new: true }).select("-password -refreshToken");
+
+    return res.status(200).json({ message: "Account details updated successfully", data: user });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+export const updateUserAvatar = async (req, res) => {
+  const avatarLocalPath = req.file?.path;
+  if(!avatarLocalPath) {
+    return res.status(400).json({ message: "Avatar is required" });
+  }
+
+  try {
+    const avatar = await uploadOnCloudiary(avatarLocalPath);
+    if(!avatar) {
+      return res.status(400).json({ message: "Avatar upload failed" });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user?._id, {
+      $set: { avatar: avatar.url },
+    }, { new: true }).select("-password -refreshToken");
+
+    return res.status(200).json({ message: "Avatar updated successfully", data: user });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
